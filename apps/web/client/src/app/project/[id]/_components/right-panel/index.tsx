@@ -46,22 +46,29 @@ export const RightPanel = observer(() => {
                             >
                                 Studio
                             </button>
-                            <ChatPanelDropdown
-                                isChatHistoryOpen={panelMode === 'chat' && isChatHistoryOpen}
-                                setIsChatHistoryOpen={setIsChatHistoryOpen}
+                            <button
+                                className={cn(
+                                    'flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground',
+                                    panelMode === 'chat' && 'bg-muted text-foreground',
+                                )}
+                                onClick={() => setPanelMode('chat')}
                             >
-                                <button
-                                    className={cn(
-                                        'flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground',
-                                        panelMode === 'chat' && 'bg-muted text-foreground',
-                                    )}
-                                    onClick={() => setPanelMode('chat')}
+                                <Icons.Sparkles className="h-3.5 w-3.5" />
+                                Chat
+                            </button>
+                            {panelMode === 'chat' && (
+                                <ChatPanelDropdown
+                                    isChatHistoryOpen={isChatHistoryOpen}
+                                    setIsChatHistoryOpen={setIsChatHistoryOpen}
                                 >
-                                    <Icons.Sparkles className="h-3.5 w-3.5" />
-                                    Chat
-                                    <Icons.ChevronDown className="h-3 w-3 text-muted-foreground" />
-                                </button>
-                            </ChatPanelDropdown>
+                                    <button
+                                        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        aria-label="Open chat menu"
+                                    >
+                                        <Icons.ChevronDown className="h-3 w-3" />
+                                    </button>
+                                </ChatPanelDropdown>
+                            )}
                         </div>
                         {panelMode === 'chat' && (
                             <div className='ml-auto'>
