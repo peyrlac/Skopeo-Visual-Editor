@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ClassEditor } from './class-editor';
 import { ComponentCatalog } from './component-catalog';
 import { PatchCenter, type StudioPendingPatch } from './patch-center';
+import { ReferencePanel } from './reference-panel';
 import { SelectionSummary } from './selection-summary';
 
 export const StudioTab = observer(() => {
@@ -182,9 +183,7 @@ export const StudioTab = observer(() => {
 
             {tab === 'components' && <ComponentCatalog sandboxId={sandboxId} />}
 
-            {tab === 'references' && (
-                <div className="text-xs text-muted-foreground">References are coming in the next Studio task.</div>
-            )}
+            {tab === 'references' && <ReferencePanel sandboxId={sandboxId} />}
         </div>
     );
 });
