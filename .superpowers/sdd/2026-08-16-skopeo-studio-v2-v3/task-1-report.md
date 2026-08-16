@@ -63,4 +63,4 @@ status: DONE
 
 ### Commit
 
-Pending final fix commit.
+`eb487d615daec319c0c61c08f3a6945ced2e9edb` (fix implementation and regression test).
