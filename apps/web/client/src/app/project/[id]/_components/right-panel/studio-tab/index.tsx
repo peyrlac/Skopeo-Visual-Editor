@@ -2,10 +2,12 @@
 
 import { useEditorEngine } from '@/components/store/editor';
 import { api } from '@/trpc/react';
+import { Button } from '@onlook/ui/button';
 import { Icons } from '@onlook/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useEffect, useRef, useState } from 'react';
 import { ClassEditor } from './class-editor';
+import { ComponentCatalog } from './component-catalog';
 import { PatchCenter, type StudioPendingPatch } from './patch-center';
 import { SelectionSummary } from './selection-summary';
 
@@ -26,6 +28,7 @@ export const StudioTab = observer(() => {
             ? [sandboxId, oid, source.data.filePath, source.data.oid, className?.value ?? ''].join('\0')
             : null;
     const [pendingPatch, setPendingPatch] = useState<StudioPendingPatch | null>(null);
+    const [tab, setTab] = useState<'inspect' | 'components' | 'references'>('inspect');
     const previewContextRef = useRef<string | null>(previewContextKey);
     const previewRequestIdRef = useRef(0);
     previewContextRef.current = previewContextKey;
@@ -88,58 +91,99 @@ export const StudioTab = observer(() => {
                 </p>
             </div>
 
-            {source.isLoading && (
+            <div className="flex gap-1 border-b pb-2">
+                <Button
+                    variant={tab === 'inspect' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setTab('inspect')}
+                >
+                    Inspect
+                </Button>
+                <Button
+                    variant={tab === 'components' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setTab('components')}
+                >
+                    Components
+                </Button>
+                <Button
+                    variant={tab === 'references' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setTab('references')}
+                >
+                    References
+                </Button>
+            </div>
+
+            {tab === 'inspect' && source.isLoading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Icons.LoadingSpinner className="h-4 w-4 animate-spin" />
                     Resolving source...
                 </div>
             )}
 
-            {source.isError && (
+            {tab === 'inspect' && source.isError && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                     {source.error.message}
                 </div>
             )}
 
-            <SelectionSummary
-                oid={oid}
-                tagName={selected?.tagName ?? null}
-                filePath={source.data?.filePath}
-                componentName={source.data?.componentName}
-                classNameValue={className?.value ?? undefined}
-                unsupportedReason={className?.kind === 'unsupported' ? className.reason : undefined}
-            />
-
-            {className?.kind === 'static' && (
+            {tab === 'inspect' && (
                 <>
-                    <ClassEditor
-                        value={className.value}
-                        disabled={source.isFetching || previewPatch.isPending || applyPatch.isPending}
-                        onPreview={handlePreview}
+                    <SelectionSummary
+                        oid={oid}
+                        tagName={selected?.tagName ?? null}
+                        filePath={source.data?.filePath}
+                        componentName={source.data?.componentName}
+                        classNameValue={className?.value ?? undefined}
+                        unsupportedReason={
+                            className?.kind === 'unsupported' ? className.reason : undefined
+                        }
                     />
 
-                    {previewPatch.isError && (
-                        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                            {previewPatch.error.message}
-                        </div>
-                    )}
+                    {className?.kind === 'static' && (
+                        <>
+                            <ClassEditor
+                                value={className.value}
+                                disabled={
+                                    source.isFetching || previewPatch.isPending || applyPatch.isPending
+                                }
+                                onPreview={handlePreview}
+                            />
 
-                    <PatchCenter
-                        patch={pendingPatch}
-                        isApplying={applyPatch.isPending}
-                        onApply={handleApply}
-                        onDiscard={() => {
-                            setPendingPatch(null);
-                            applyPatch.reset();
-                        }}
-                    />
+                            {previewPatch.isError && (
+                                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                                    {previewPatch.error.message}
+                                </div>
+                            )}
 
-                    {applyPatch.isError && (
-                        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                            {applyPatch.error.message}
-                        </div>
+                            <PatchCenter
+                                patch={pendingPatch}
+                                isApplying={applyPatch.isPending}
+                                onApply={handleApply}
+                                onDiscard={() => {
+                                    setPendingPatch(null);
+                                    applyPatch.reset();
+                                }}
+                            />
+
+                            {applyPatch.isError && (
+                                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                                    {applyPatch.error.message}
+                                </div>
+                            )}
+                        </>
                     )}
                 </>
+            )}
+
+            {tab === 'components' && <ComponentCatalog sandboxId={sandboxId} />}
+
+            {tab === 'references' && (
+                <div className="text-xs text-muted-foreground">References are coming in the next Studio task.</div>
             )}
         </div>
     );
