@@ -4,7 +4,7 @@ import { useEditorEngine } from '@/components/store/editor';
 import { api } from '@/trpc/react';
 import { Icons } from '@onlook/ui/icons';
 import { observer } from 'mobx-react-lite';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ClassEditor } from './class-editor';
 import { PatchCenter, type StudioPendingPatch } from './patch-center';
 import { SelectionSummary } from './selection-summary';
@@ -21,27 +21,46 @@ export const StudioTab = observer(() => {
         { enabled: !!sandboxId && !!oid },
     );
     const className = source.data?.className;
+    const previewContextKey =
+        sandboxId && source.data
+            ? [sandboxId, oid, source.data.filePath, source.data.oid, className?.value ?? ''].join('\0')
+            : null;
     const [pendingPatch, setPendingPatch] = useState<StudioPendingPatch | null>(null);
+    const previewContextRef = useRef<string | null>(previewContextKey);
+    const previewRequestIdRef = useRef(0);
+    previewContextRef.current = previewContextKey;
     const previewPatch = api.studio.previewClassPatch.useMutation();
     const applyPatch = api.studio.applyClassPatch.useMutation();
 
     useEffect(() => {
+        previewContextRef.current = previewContextKey;
+        previewRequestIdRef.current += 1;
         setPendingPatch(null);
         previewPatch.reset();
         applyPatch.reset();
-    }, [sandboxId, oid, source.data?.filePath, source.data?.oid, className?.value]);
+    }, [previewContextKey]);
 
     const handlePreview = async (nextClassName: string) => {
-        if (!source.data || !sandboxId) {
+        if (!source.data || !sandboxId || !previewContextKey) {
             return;
         }
 
+        const requestId = previewRequestIdRef.current + 1;
+        previewRequestIdRef.current = requestId;
+        const requestContextKey = previewContextKey;
         const patch = await previewPatch.mutateAsync({
             sandboxId,
             filePath: source.data.filePath,
             oid: source.data.oid,
             nextClassName,
         });
+        if (
+            requestId !== previewRequestIdRef.current ||
+            requestContextKey !== previewContextRef.current
+        ) {
+            return;
+        }
+
         setPendingPatch({ ...patch, nextClassName });
     };
 

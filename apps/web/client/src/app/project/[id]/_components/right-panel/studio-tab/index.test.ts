@@ -22,4 +22,13 @@ describe('studio tab patch editor', () => {
         expect(indexSource).toContain('setPendingPatch(null)');
         expect(indexSource).toContain('await source.refetch()');
     });
+
+    test('guards preview responses against stale selection source or sandbox context', async () => {
+        const indexSource = await readFile(path.join(studioTabDir, 'index.tsx'), 'utf8');
+
+        expect(indexSource).toContain('previewContextRef');
+        expect(indexSource).toContain('previewRequestIdRef');
+        expect(indexSource).toContain('previewContextRef.current');
+        expect(indexSource).toContain('requestId !== previewRequestIdRef.current');
+    });
 });
