@@ -1,10 +1,15 @@
 import { env } from "@/env";
 import { Routes } from "@/utils/constants";
+import { isLocalSkopeoMode } from "@/utils/local-mode";
 import { createClient } from "@/utils/supabase/server";
 import { checkUserSubscriptionAccess } from "@/utils/subscription";
 import { redirect } from "next/navigation";
 
 export default async function Layout({ children }: Readonly<{ children: React.ReactNode }>) {
+    if (isLocalSkopeoMode()) {
+        return <>{children}</>;
+    }
+
     const supabase = await createClient();
     const {
         data: { session },

@@ -9,7 +9,7 @@ import { CardDescription, CardTitle } from '@onlook/ui/card';
 import { Icons } from '@onlook/ui/icons';
 import { isBinaryFile } from '@onlook/utility';
 import { motion } from 'motion/react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StepContent, StepFooter, StepHeader } from '../../steps';
 import { useProjectCreation } from '../_context';
 
@@ -34,6 +34,12 @@ export const NewSelectFolder = () => {
     const [error, setError] = useState('');
     const [validation, setValidation] = useState<NextJsProjectValidation | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!validation && projectData.files?.length) {
+            void validateNextJsProject(projectData.files).then(setValidation);
+        }
+    }, [projectData.files, validateNextJsProject, validation]);
 
     const extractProjectName = (files: ProcessedFile[]): string | null => {
         const packageJsonFile = files.find(

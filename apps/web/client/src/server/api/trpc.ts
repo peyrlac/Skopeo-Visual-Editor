@@ -8,6 +8,7 @@
  */
 
 import { env } from '@/env';
+import { createLocalSkopeoUser, isLocalSkopeoMode } from '@/utils/local-mode';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { db } from '@onlook/db/src/client';
 import { createServerClient } from '@supabase/ssr';
@@ -32,6 +33,15 @@ import { ZodError } from 'zod';
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
     const supabase = createSupabaseClientFromHeaders(opts.headers);
+    if (isLocalSkopeoMode()) {
+        return {
+            db,
+            supabase,
+            user: createLocalSkopeoUser(),
+            ...opts,
+        };
+    }
+
     const authHeader = opts.headers.get('authorization');
     const accessToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
     const cookieAccessToken = accessToken ?? getAccessTokenFromCookieHeader(opts.headers.get('cookie') ?? '');

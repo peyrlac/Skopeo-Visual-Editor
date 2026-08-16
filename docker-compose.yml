@@ -12,7 +12,9 @@ services:
     environment:
       NEXT_PUBLIC_DEV_LOGIN_ENABLED: "true"
       NEXT_PUBLIC_SUPABASE_URL: "http://host.docker.internal:54321"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "local-anon-key"
       SUPABASE_DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:54322/postgres"
+      SUPABASE_SERVICE_ROLE_KEY: "local-service-role-key"
       ONLOOK_LOCAL_PROJECT_ROOT: "/workspace/skopeo-next"
       NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL: "http://localhost:3001"
     command: ["bun", "apps/web/client/.next/standalone/apps/web/client/server.js"]

@@ -16,8 +16,11 @@ COPY . .
 
 # Install dependencies and build
 RUN bun install --frozen-lockfile
+ENV NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ENV NEXT_PUBLIC_DEV_LOGIN_ENABLED=true
-ENV NEXT_PUBLIC_SUPABASE_URL=http://host.docker.internal:54321
+ENV NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=local-anon-key
+ENV NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL=http://localhost:3001
 RUN cd apps/web/client && bun run build:standalone
 
 # Expose the application port

@@ -1,11 +1,13 @@
 import { env } from '@/env';
 import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
 import { trackEvent } from '@/utils/analytics/server';
+import { LOCAL_USER_EMAIL, LOCAL_USER_ID, isLocalSkopeoMode } from '@/utils/local-mode';
 import { TRPCError } from '@trpc/server';
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { initModel } from '@onlook/ai';
 import { getSandboxPreviewUrl, STORAGE_BUCKETS } from '@onlook/constants';
 import {
+    authUsers,
     branches,
     canvases,
     conversations,
@@ -27,6 +29,7 @@ import {
     toDbPreviewImg,
     userCanvases,
     userProjects,
+    users,
     type Canvas,
     type UserCanvas
 } from '@onlook/db';
@@ -249,6 +252,25 @@ export const projectRouter = createTRPCRouter({
         }))
         .mutation(async ({ ctx, input }) => {
             return await ctx.db.transaction(async (tx) => {
+                if (isLocalSkopeoMode()) {
+                    await tx.insert(authUsers).values({
+                        id: LOCAL_USER_ID,
+                        email: LOCAL_USER_EMAIL,
+                        emailConfirmedAt: new Date(),
+                        rawUserMetaData: {
+                            name: 'Skopeo Local',
+                        },
+                    }).onConflictDoNothing();
+
+                    await tx.insert(users).values({
+                        id: LOCAL_USER_ID,
+                        firstName: 'Skopeo',
+                        lastName: 'Local',
+                        displayName: 'Skopeo Local',
+                        email: LOCAL_USER_EMAIL,
+                    }).onConflictDoNothing();
+                }
+
                 // 1. Insert the new project
                 const [newProject] = await tx.insert(projects).values(input.project).returning();
                 if (!newProject) {

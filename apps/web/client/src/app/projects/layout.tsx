@@ -1,4 +1,5 @@
 import { env } from '@/env';
+import { isLocalSkopeoMode } from '@/utils/local-mode';
 import { Routes } from '@/utils/constants';
 import { createClient } from '@/utils/supabase/server';
 import { checkUserSubscriptionAccess } from '@/utils/subscription';
@@ -13,6 +14,10 @@ export const metadata: Metadata = {
 };
 
 export default async function Layout({ children }: Readonly<{ children: React.ReactNode }>) {
+    if (isLocalSkopeoMode()) {
+        return <>{children}</>;
+    }
+
     const supabase = await createClient();
     const {
         data: { session },

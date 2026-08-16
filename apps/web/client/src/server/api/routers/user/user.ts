@@ -1,4 +1,5 @@
 import { trackEvent } from '@/utils/analytics/server';
+import { LOCAL_USER_EMAIL, LOCAL_USER_ID, isLocalSkopeoMode } from '@/utils/local-mode';
 import { callUserWebhook } from '@/utils/n8n/webhook';
 import { authUsers, fromDbUser, userInsertSchema, users, type User } from '@onlook/db';
 import { extractNames } from '@onlook/utility';
@@ -10,6 +11,22 @@ import { userSettingsRouter } from './user-settings';
 
 export const userRouter = createTRPCRouter({
     get: protectedProcedure.query(async ({ ctx }) => {
+        if (isLocalSkopeoMode()) {
+            const now = new Date();
+            return {
+                id: LOCAL_USER_ID,
+                firstName: 'Skopeo',
+                lastName: 'Local',
+                displayName: 'Skopeo Local',
+                email: LOCAL_USER_EMAIL,
+                avatarUrl: null,
+                createdAt: now,
+                updatedAt: now,
+                stripeCustomerId: null,
+                githubInstallationId: null,
+            };
+        }
+
         const authUser = ctx.user;
         const user = await ctx.db.query.users.findFirst({
             where: eq(users.id, authUser.id),

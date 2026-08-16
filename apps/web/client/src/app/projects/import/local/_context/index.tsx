@@ -43,6 +43,46 @@ interface ProjectCreationContextValue {
 
 const ProjectCreationContext = createContext<ProjectCreationContextValue | undefined>(undefined);
 
+function createLocalSkopeoProjectData(): Partial<Project> {
+    return {
+        name: 'skopeo-next',
+        folderPath: 'SkopeoAPP/Next',
+        files: [
+            {
+                path: 'package.json',
+                type: ProcessedFileType.TEXT,
+                content: JSON.stringify({
+                    name: 'skopeo-next',
+                    dependencies: {
+                        next: '15.5.0',
+                        react: '18.3.1',
+                    },
+                }),
+            },
+            {
+                path: 'src/app/layout.tsx',
+                type: ProcessedFileType.TEXT,
+                content: 'export default function RootLayout({ children }) { return children; }',
+            },
+        ],
+    };
+}
+
+function getInitialProjectData(): Partial<Project> {
+    if (
+        process.env.NEXT_PUBLIC_DEV_LOGIN_ENABLED === 'true' &&
+        process.env.NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL
+    ) {
+        return createLocalSkopeoProjectData();
+    }
+
+    return {
+        name: '',
+        folderPath: '',
+        files: [],
+    };
+}
+
 export function detectPortFromPackageJson(packageJsonFile: ProcessedFile | undefined): number {
     const defaultPort = 3000;
 
@@ -89,11 +129,7 @@ interface ProjectCreationProviderProps {
 export const ProjectCreationProvider = ({ children, totalSteps }: ProjectCreationProviderProps) => {
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState(0);
-    const [projectData, setProjectDataState] = useState<Partial<Project>>({
-        name: '',
-        folderPath: '',
-        files: [],
-    });
+    const [projectData, setProjectDataState] = useState<Partial<Project>>(getInitialProjectData);
     const [error, setError] = useState<string | null>(null);
     const [direction, setDirection] = useState(0);
     const [isFinalizing, setIsFinalizing] = useState(false);

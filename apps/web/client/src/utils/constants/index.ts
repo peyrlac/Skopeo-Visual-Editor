@@ -28,6 +28,7 @@ export const Routes = {
     PROJECTS: '/projects',
     PROJECT: '/project',
     IMPORT_PROJECT: '/projects/import',
+    IMPORT_LOCAL_PROJECT: '/projects/import/local',
     IMPORT_GITHUB: '/projects/import/github',
 
     // Callback

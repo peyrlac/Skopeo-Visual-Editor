@@ -3,7 +3,9 @@
 import { CreateManagerProvider } from '@/components/store/create';
 import { SubscriptionModal } from '@/components/ui/pricing-modal';
 import { NonProjectSettingsModal } from '@/components/ui/settings-modal/non-project';
-import { ExternalRoutes } from '@/utils/constants';
+import { ExternalRoutes, Routes } from '@/utils/constants';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { AuthModal } from './_components/auth-modal';
 import { Hero } from './_components/hero';
 import { ContributorSection } from './_components/landing-page/contributor-section';
@@ -15,6 +17,21 @@ import { WhatCanOnlookDoSection } from './_components/landing-page/what-can-onlo
 import { WebsiteLayout } from './_components/website-layout';
 
 export default function Main() {
+    const router = useRouter();
+    const isLocalMode =
+        process.env.NEXT_PUBLIC_DEV_LOGIN_ENABLED === 'true' &&
+        !!process.env.NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL;
+
+    useEffect(() => {
+        if (isLocalMode) {
+            router.replace(Routes.IMPORT_LOCAL_PROJECT);
+        }
+    }, [isLocalMode, router]);
+
+    if (isLocalMode) {
+        return null;
+    }
+
     return (
         <CreateManagerProvider>
             <WebsiteLayout showFooter={true}>
