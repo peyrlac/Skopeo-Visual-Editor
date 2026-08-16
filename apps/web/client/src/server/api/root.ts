@@ -10,6 +10,7 @@ import {
     publishRouter,
     sandboxRouter,
     settingsRouter,
+    studioRouter,
     subscriptionRouter,
     usageRouter,
     userCanvasRouter,
@@ -40,6 +41,7 @@ export const appRouter = createTRPCRouter({
     subscription: subscriptionRouter,
     usage: usageRouter,
     publish: publishRouter,
+    studio: studioRouter,
 });
 
 // export type definition of API

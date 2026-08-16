@@ -1,0 +1,142 @@
+import { env } from '@/env';
+import { NodeFsProvider } from '@onlook/code-provider/providers/nodefs';
+import { previewClassNamePatchInFile, resolveElementSourceFromFiles } from '@onlook/parser';
+import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
+
+import { createTRPCRouter, protectedProcedure } from '../../trpc';
+
+const TEXT_EXTENSIONS = /\.(tsx|ts|jsx|js)$/;
+const SEARCH_DIRS = ['src/components', 'src/views', 'src/app'];
+
+export const studioRouter = createTRPCRouter({
+    resolveElementSource: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), oid: z.string() }))
+        .query(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            const files = await readSearchFiles();
+            return resolveElementSourceFromFiles(files, input.oid);
+        }),
+
+    previewClassPatch: protectedProcedure
+        .input(
+            z.object({
+                sandboxId: z.string(),
+                filePath: z.string(),
+                oid: z.string(),
+                nextClassName: z.string(),
+            }),
+        )
+        .mutation(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            const provider = await getLocalProvider();
+            try {
+                const { file } = await provider.readFile({ args: { path: input.filePath } });
+                if (typeof file.content !== 'string') {
+                    throw new TRPCError({
+                        code: 'BAD_REQUEST',
+                        message: `${input.filePath} is not a text file`,
+                    });
+                }
+                return previewClassNamePatchInFile({
+                    filePath: input.filePath,
+                    content: file.content,
+                    oid: input.oid,
+                    nextClassName: input.nextClassName,
+                });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+
+    applyClassPatch: protectedProcedure
+        .input(
+            z.object({
+                sandboxId: z.string(),
+                filePath: z.string(),
+                oid: z.string(),
+                nextClassName: z.string(),
+            }),
+        )
+        .mutation(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            const provider = await getLocalProvider();
+            try {
+                const { file } = await provider.readFile({ args: { path: input.filePath } });
+                if (typeof file.content !== 'string') {
+                    throw new TRPCError({
+                        code: 'BAD_REQUEST',
+                        message: `${input.filePath} is not a text file`,
+                    });
+                }
+                const patch = previewClassNamePatchInFile({
+                    filePath: input.filePath,
+                    content: file.content,
+                    oid: input.oid,
+                    nextClassName: input.nextClassName,
+                });
+                await provider.writeFile({
+                    args: { path: input.filePath, content: patch.after, overwrite: true },
+                });
+                return { ...patch, status: 'applied' as const };
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+});
+
+function ensureLocalSandbox(sandboxId: string) {
+    if (!sandboxId.startsWith('local:')) {
+        throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Skopeo Studio V1 only supports local projects',
+        });
+    }
+}
+
+async function getLocalProvider() {
+    const provider = new NodeFsProvider({ rootDir: env.ONLOOK_LOCAL_PROJECT_ROOT });
+    await provider.initialize({});
+    return provider;
+}
+
+async function readSearchFiles() {
+    const provider = await getLocalProvider();
+    try {
+        const files: Array<{ path: string; content: string }> = [];
+        for (const dir of SEARCH_DIRS) {
+            await collectTextFiles(provider, dir, files);
+        }
+        return files;
+    } finally {
+        await provider.destroy().catch(() => {});
+    }
+}
+
+async function collectTextFiles(
+    provider: NodeFsProvider,
+    dir: string,
+    files: Array<{ path: string; content: string }>,
+) {
+    let entries;
+    try {
+        entries = (await provider.listFiles({ args: { path: dir } })).files;
+    } catch {
+        return;
+    }
+
+    for (const entry of entries) {
+        const childPath = `${dir}/${entry.name}`;
+        if (entry.type === 'directory') {
+            await collectTextFiles(provider, childPath, files);
+            continue;
+        }
+        if (!TEXT_EXTENSIONS.test(entry.name)) {
+            continue;
+        }
+        const { file } = await provider.readFile({ args: { path: childPath } });
+        if (typeof file.content === 'string') {
+            files.push({ path: childPath, content: file.content });
+        }
+    }
+}
