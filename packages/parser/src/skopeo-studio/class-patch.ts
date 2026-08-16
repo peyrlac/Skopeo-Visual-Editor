@@ -1,7 +1,7 @@
 import { EditorAttributes } from '@onlook/constants';
 import { getAstFromContent } from '../parse';
 import type { T } from '../packages';
-import { generate, t, traverse } from '../packages';
+import { t, traverse } from '../packages';
 import { createUnifiedDiff } from './diff';
 
 export type StudioPatchPreview = {
@@ -24,6 +24,7 @@ export function previewClassNamePatchInFile(input: {
     }
 
     let found = false;
+    let after: string | null = null;
 
     traverse(ast, {
         JSXOpeningElement(path) {
@@ -39,21 +40,14 @@ export function previewClassNamePatchInFile(input: {
             );
 
             if (!attr || !t.isJSXAttribute(attr)) {
-                path.node.attributes.push(
-                    t.jsxAttribute(
-                        t.jsxIdentifier('className'),
-                        t.stringLiteral(input.nextClassName),
-                    ),
-                );
-                path.stop();
-                return;
+                throw new Error(`No static className found for oid ${input.oid}`);
             }
 
             if (!attr.value || !t.isStringLiteral(attr.value)) {
                 throw new Error('Only static string className values are supported in V1');
             }
 
-            attr.value = t.stringLiteral(input.nextClassName);
+            after = replaceStringLiteralValue(input.content, attr.value, input.nextClassName);
             path.stop();
         },
     });
@@ -62,7 +56,9 @@ export function previewClassNamePatchInFile(input: {
         throw new Error(`No JSX element found for oid ${input.oid}`);
     }
 
-    const after = generate(ast).code;
+    if (after === null) {
+        throw new Error(`No static className found for oid ${input.oid}`);
+    }
 
     return {
         filePath: input.filePath,
@@ -81,4 +77,21 @@ function getStringAttribute(node: T.JSXOpeningElement, name: string): string | n
         return null;
     }
     return attr.value.value;
+}
+
+function replaceStringLiteralValue(
+    content: string,
+    value: T.StringLiteral,
+    nextValue: string,
+): string {
+    if (typeof value.start !== 'number' || typeof value.end !== 'number') {
+        throw new Error('Could not locate static className value');
+    }
+
+    const quote = content[value.start];
+    if ((quote !== '"' && quote !== "'") || content[value.end - 1] !== quote) {
+        throw new Error('Could not locate static className value');
+    }
+
+    return `${content.slice(0, value.start + 1)}${nextValue}${content.slice(value.end - 1)}`;
 }

@@ -27,6 +27,34 @@ export function Card() {
         expect(patch.diff).toContain('+');
     });
 
+    test('preserves non-targeted JSX text exactly', () => {
+        const content = `
+export function Card() {
+  return (
+    <article data-oid="card-1" className="rounded-lg border bg-card p-4">
+      {/* spacing and quotes must stay untouched */}
+      <h2 data-oid="title-1" className="text-lg font-semibold">Dune</h2>
+      <p data-oid="copy-1" className='text-sm text-muted-foreground'>Classic sci-fi</p>
+    </article>
+  );
+}
+`;
+
+        const patch = previewClassNamePatchInFile({
+            filePath: 'src/components/Card.tsx',
+            content,
+            oid: 'title-1',
+            nextClassName: 'text-2xl font-bold text-primary',
+        });
+
+        expect(patch.after).toBe(
+            content.replace(
+                'className="text-lg font-semibold"',
+                'className="text-2xl font-bold text-primary"',
+            ),
+        );
+    });
+
     test('throws for unsupported className expressions', () => {
         const content = `
 export function Card({ active }: { active: boolean }) {
@@ -42,6 +70,17 @@ export function Card({ active }: { active: boolean }) {
                 nextClassName: 'rounded-lg',
             }),
         ).toThrow('Only static string className values are supported');
+    });
+
+    test('throws when className is missing', () => {
+        expect(() =>
+            previewClassNamePatchInFile({
+                filePath: 'src/components/Card.tsx',
+                content: '<div data-oid="card-1" />',
+                oid: 'card-1',
+                nextClassName: 'p-6',
+            }),
+        ).toThrow('No static className found');
     });
 
     test('throws when oid is missing', () => {
