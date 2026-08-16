@@ -68,4 +68,21 @@ const helper = () => null;
 
         expect(components).toEqual([]);
     });
+
+    test('filters exported PascalCase utilities with nested JSX callbacks', () => {
+        const components = listStudioComponentsFromFiles([
+            {
+                path: 'src/components/renderers.tsx',
+                content: `
+export function BuildRenderers() {
+  return {
+    title: () => <h1>Title</h1>,
+  };
+}
+`,
+            },
+        ]);
+
+        expect(components).toEqual([]);
+    });
 });

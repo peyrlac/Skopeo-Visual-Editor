@@ -63,7 +63,7 @@ function addFunctionComponent(
     if (!isComponentName(name)) {
         return;
     }
-    if (!containsJsx(declaration)) {
+    if (!returnsJsx(declaration)) {
         return;
     }
 
@@ -82,7 +82,7 @@ function addVariableComponent(
     if (!t.isArrowFunctionExpression(declaration.init)) {
         return;
     }
-    if (!containsJsx(declaration.init)) {
+    if (!returnsJsx(declaration.init)) {
         return;
     }
 
@@ -139,12 +139,28 @@ function isComponentName(name: string | undefined): name is string {
     return Boolean(name && /^[A-Z]/.test(name));
 }
 
+function returnsJsx(node: T.FunctionDeclaration | T.ArrowFunctionExpression): boolean {
+    if (t.isArrowFunctionExpression(node) && !t.isBlockStatement(node.body)) {
+        return containsJsx(node.body);
+    }
+
+    const body = t.isBlockStatement(node.body) ? node.body.body : [];
+    return body.some((statement) => t.isReturnStatement(statement) && containsJsx(statement.argument));
+}
+
 function containsJsx(node: T.Node | null | undefined): boolean {
     if (!node) {
         return false;
     }
     if (t.isJSXElement(node) || t.isJSXFragment(node)) {
         return true;
+    }
+    if (
+        t.isFunctionDeclaration(node) ||
+        t.isFunctionExpression(node) ||
+        t.isArrowFunctionExpression(node)
+    ) {
+        return false;
     }
 
     const visitorKeys = t.VISITOR_KEYS[node.type] ?? [];
