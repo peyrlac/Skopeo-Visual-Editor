@@ -63,6 +63,9 @@ function addFunctionComponent(
     if (!isComponentName(name)) {
         return;
     }
+    if (!containsJsx(declaration)) {
+        return;
+    }
 
     addComponent(components, file, declaration, name, exportType, declaration.params[0]);
 }
@@ -77,6 +80,9 @@ function addVariableComponent(
         return;
     }
     if (!t.isArrowFunctionExpression(declaration.init)) {
+        return;
+    }
+    if (!containsJsx(declaration.init)) {
         return;
     }
 
@@ -131,6 +137,28 @@ function getPropTypeName(
 
 function isComponentName(name: string | undefined): name is string {
     return Boolean(name && /^[A-Z]/.test(name));
+}
+
+function containsJsx(node: T.Node | null | undefined): boolean {
+    if (!node) {
+        return false;
+    }
+    if (t.isJSXElement(node) || t.isJSXFragment(node)) {
+        return true;
+    }
+
+    const visitorKeys = t.VISITOR_KEYS[node.type] ?? [];
+    return visitorKeys.some((key) => {
+        const child = (node as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(child)) {
+            return child.some((item) => isAstNode(item) && containsJsx(item));
+        }
+        return isAstNode(child) && containsJsx(child);
+    });
+}
+
+function isAstNode(value: unknown): value is T.Node {
+    return typeof value === 'object' && value !== null && 'type' in value;
 }
 
 function getFolder(filePath: string): StudioComponentMeta['folder'] {

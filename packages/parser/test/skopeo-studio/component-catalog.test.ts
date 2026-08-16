@@ -57,4 +57,15 @@ const helper = () => null;
         expect(components.map((component) => component.name)).toEqual(['Button']);
         expect(components[0]?.folder).toBe('ui');
     });
+
+    test('filters exported PascalCase utilities without JSX', () => {
+        const components = listStudioComponentsFromFiles([
+            {
+                path: 'src/components/date-utils.tsx',
+                content: `export function FormatDate() { return 'today'; }`,
+            },
+        ]);
+
+        expect(components).toEqual([]);
+    });
 });
