@@ -1,7 +1,12 @@
 import { env } from '@/env';
 import { NodeFsProvider } from '@onlook/code-provider/providers/nodefs';
-import { previewClassNamePatchInFile, resolveElementSourceFromFiles } from '@onlook/parser';
+import {
+    listStudioComponentsFromFiles,
+    previewClassNamePatchInFile,
+    resolveElementSourceFromFiles,
+} from '@onlook/parser';
 import { TRPCError } from '@trpc/server';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { z } from 'zod';
 
@@ -9,6 +14,20 @@ import { createTRPCRouter, protectedProcedure } from '../../trpc';
 
 const TEXT_EXTENSIONS = /\.(tsx|ts|jsx|js)$/;
 const SEARCH_DIRS = ['src/components', 'src/views', 'src/app'];
+const REFERENCES_FILE_PATH = '.onlook/skopeo-studio/figma-references.json';
+
+export const StudioReferenceInput = z.object({
+    title: z.string(),
+    kind: z.string(),
+    componentId: z.string(),
+    content: z.string(),
+    notes: z.string(),
+});
+
+export const StudioReference = StudioReferenceInput.extend({
+    id: z.string(),
+    createdAt: z.string(),
+});
 
 export const studioRouter = createTRPCRouter({
     resolveElementSource: protectedProcedure
@@ -17,6 +36,45 @@ export const studioRouter = createTRPCRouter({
             ensureLocalSandbox(input.sandboxId);
             const files = await readSearchFiles();
             return resolveElementSourceFromFiles(files, input.oid);
+        }),
+
+    listComponents: protectedProcedure
+        .input(z.object({ sandboxId: z.string() }))
+        .query(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            return listStudioComponentsFromFiles(await readSearchFiles()).sort((a, b) =>
+                a.id.localeCompare(b.id),
+            );
+        }),
+
+    listReferences: protectedProcedure
+        .input(z.object({ sandboxId: z.string() }))
+        .query(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            return readReferences();
+        }),
+
+    saveReference: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), reference: StudioReferenceInput }))
+        .mutation(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            const reference = StudioReference.parse({
+                ...input.reference,
+                id: crypto.randomUUID(),
+                createdAt: new Date().toISOString(),
+            });
+            const references = await readReferences();
+            references.push(reference);
+            await writeReferences(references);
+            return reference;
+        }),
+
+    deleteReference: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), id: z.string() }))
+        .mutation(async ({ input }) => {
+            ensureLocalSandbox(input.sandboxId);
+            const references = await readReferences();
+            await writeReferences(references.filter((reference) => reference.id !== input.id));
         }),
 
     previewClassPatch: protectedProcedure
@@ -134,6 +192,38 @@ async function readSearchFiles() {
             await collectTextFiles(provider, dir, files);
         }
         return files;
+    } finally {
+        await provider.destroy().catch(() => {});
+    }
+}
+
+async function readReferences() {
+    const provider = await getLocalProvider();
+    try {
+        try {
+            const { file } = await provider.readFile({ args: { path: REFERENCES_FILE_PATH } });
+            if (typeof file.content !== 'string') {
+                return [];
+            }
+            return z.array(StudioReference).parse(JSON.parse(file.content));
+        } catch {
+            return [];
+        }
+    } finally {
+        await provider.destroy().catch(() => {});
+    }
+}
+
+async function writeReferences(references: z.infer<typeof StudioReference>[]) {
+    const provider = await getLocalProvider();
+    try {
+        await provider.writeFile({
+            args: {
+                path: REFERENCES_FILE_PATH,
+                content: `${JSON.stringify(references, null, 2)}\n`,
+                overwrite: true,
+            },
+        });
     } finally {
         await provider.destroy().catch(() => {});
     }

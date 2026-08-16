@@ -21,6 +21,14 @@ const fixture = `export function Card() {
         </article>
     );
 }
+
+export function MediaCard() {
+    return <article>Media card</article>;
+}
+
+export default function DashboardPage() {
+    return <main>Dashboard</main>;
+}
 `;
 
 describe('studio router', () => {
@@ -76,6 +84,33 @@ describe('studio router', () => {
         expect(patch.status).toBe('applied');
         expect(updated).toContain('text-2xl font-bold text-primary');
         expect(updated).not.toContain('text-lg font-semibold');
+    });
+
+    test('lists Skopeo components from the local project', async () => {
+        const caller = await createStudioCaller();
+        const components = await caller.studio.listComponents({ sandboxId: 'local:test' });
+
+        expect(components.some((component) => component.name === 'MediaCard')).toBe(true);
+        expect(components.some((component) => component.name === 'DashboardPage')).toBe(true);
+    });
+
+    test('saves and lists manual Figma references locally', async () => {
+        const caller = await createStudioCaller();
+        const saved = await caller.studio.saveReference({
+            sandboxId: 'local:test',
+            reference: {
+                title: 'Media card Figma',
+                kind: 'figma-json',
+                componentId: 'src/components/MediaCard.tsx:MediaCard',
+                content: '{"name":"Media card"}',
+                notes: 'Match spacing and poster ratio.',
+            },
+        });
+
+        const references = await caller.studio.listReferences({ sandboxId: 'local:test' });
+        expect(references.some((reference) => reference.id === saved.id)).toBe(true);
+
+        await caller.studio.deleteReference({ sandboxId: 'local:test', id: saved.id });
     });
 
     test('rejects a non-local sandbox through tRPC', async () => {
