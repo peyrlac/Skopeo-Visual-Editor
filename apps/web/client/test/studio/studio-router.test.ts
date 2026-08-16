@@ -8,6 +8,7 @@ const root = path.join(import.meta.dir, 'tmp-skopeo-mini');
 const filePath = 'src/components/Card.tsx';
 const absoluteFile = path.join(root, filePath);
 const packageFile = path.join(root, 'package.json');
+const referencesFile = path.join(root, '.onlook', 'skopeo-studio', 'figma-references.json');
 
 const fixture = `export function Card() {
     return (
@@ -109,8 +110,30 @@ describe('studio router', () => {
 
         const references = await caller.studio.listReferences({ sandboxId: 'local:test' });
         expect(references.some((reference) => reference.id === saved.id)).toBe(true);
+        expect(JSON.parse(await readFile(referencesFile, 'utf8'))).toEqual(
+            expect.arrayContaining([expect.objectContaining({ id: saved.id })]),
+        );
 
         await caller.studio.deleteReference({ sandboxId: 'local:test', id: saved.id });
+        expect(await caller.studio.listReferences({ sandboxId: 'local:test' })).not.toEqual(
+            expect.arrayContaining([expect.objectContaining({ id: saved.id })]),
+        );
+    });
+
+    test('rejects malformed local reference data', async () => {
+        const caller = await createStudioCaller();
+        await mkdir(path.dirname(referencesFile), { recursive: true });
+        await writeFile(referencesFile, '{not valid json', 'utf8');
+
+        await expect(caller.studio.listReferences({ sandboxId: 'local:test' })).rejects.toThrow();
+    });
+
+    test('does not create a reference file when deleting an unknown reference', async () => {
+        const caller = await createStudioCaller();
+
+        await caller.studio.deleteReference({ sandboxId: 'local:test', id: 'unknown' });
+
+        await expect(readFile(referencesFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     });
 
     test('rejects a non-local sandbox through tRPC', async () => {
@@ -121,6 +144,32 @@ describe('studio router', () => {
                 sandboxId: 'remote:test',
                 oid: 'title-1',
             }),
+        ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    test('rejects new studio procedures for non-local sandboxes', async () => {
+        const caller = await createStudioCaller();
+
+        await expect(caller.studio.listComponents({ sandboxId: 'remote:test' })).rejects.toMatchObject({
+            code: 'BAD_REQUEST',
+        });
+        await expect(caller.studio.listReferences({ sandboxId: 'remote:test' })).rejects.toMatchObject({
+            code: 'BAD_REQUEST',
+        });
+        await expect(
+            caller.studio.saveReference({
+                sandboxId: 'remote:test',
+                reference: {
+                    title: 'Media card Figma',
+                    kind: 'figma-json',
+                    componentId: 'src/components/MediaCard.tsx:MediaCard',
+                    content: '{"name":"Media card"}',
+                    notes: 'Match spacing and poster ratio.',
+                },
+            }),
+        ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+        await expect(
+            caller.studio.deleteReference({ sandboxId: 'remote:test', id: 'reference-1' }),
         ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     });
 

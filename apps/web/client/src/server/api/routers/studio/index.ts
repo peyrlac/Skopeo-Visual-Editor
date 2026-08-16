@@ -74,7 +74,10 @@ export const studioRouter = createTRPCRouter({
         .mutation(async ({ input }) => {
             ensureLocalSandbox(input.sandboxId);
             const references = await readReferences();
-            await writeReferences(references.filter((reference) => reference.id !== input.id));
+            const remainingReferences = references.filter((reference) => reference.id !== input.id);
+            if (remainingReferences.length !== references.length) {
+                await writeReferences(remainingReferences);
+            }
         }),
 
     previewClassPatch: protectedProcedure
@@ -203,15 +206,22 @@ async function readReferences() {
         try {
             const { file } = await provider.readFile({ args: { path: REFERENCES_FILE_PATH } });
             if (typeof file.content !== 'string') {
-                return [];
+                throw new Error(`${REFERENCES_FILE_PATH} is not a text file`);
             }
             return z.array(StudioReference).parse(JSON.parse(file.content));
-        } catch {
-            return [];
+        } catch (error) {
+            if (isMissingFileError(error)) {
+                return [];
+            }
+            throw error;
         }
     } finally {
         await provider.destroy().catch(() => {});
     }
+}
+
+function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
 async function writeReferences(references: z.infer<typeof StudioReference>[]) {
