@@ -20,7 +20,7 @@ Failure: the test could not import `listStudioComponentsFromFiles` because it wa
 
 ## Commit Hashes
 
-`0aaefafd2445381e3eb595e2152bae49c1bc45d6` (amended commit includes this report).
+`b8745a06e2d46d9447fd1fcc3a1a670c8404d945` (implementation and report commit).
 
 ## Changed Files
 
