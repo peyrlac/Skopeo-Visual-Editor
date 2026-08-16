@@ -12,7 +12,9 @@ import { useSearchParams } from 'next/navigation';
 import { DevLoginButton, LoginButton } from '../_components/login-button';
 
 export default function LoginPage() {
-    const isDev = process.env.NODE_ENV === 'development';
+    const showDevLogin =
+        process.env.NODE_ENV === 'development' ||
+        process.env.NEXT_PUBLIC_DEV_LOGIN_ENABLED === 'true';
     const t = useTranslations();
     const backgroundUrl = useGetBackground('login');
     const returnUrl = useSearchParams().get(LocalForageKeys.RETURN_URL);
@@ -50,7 +52,7 @@ export default function LoginPage() {
                             providerName="Google"
                         />
                     </div>
-                    {isDev && <DevLoginButton returnUrl={returnUrl} />}
+                    {showDevLogin && <DevLoginButton returnUrl={returnUrl} />}
                     <p className="text-small text-foreground-onlook">
                         {t(transKeys.welcome.terms.agreement)}{' '}
                         <Link

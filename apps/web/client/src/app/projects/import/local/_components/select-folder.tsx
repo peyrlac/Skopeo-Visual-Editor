@@ -88,8 +88,13 @@ export const NewSelectFolder = () => {
                 continue;
             }
 
-            // Skip ignored files
-            if (IGNORED_UPLOAD_FILES.includes(file.name)) {
+            // Skip ignored files and local-only environment/log files.
+            if (
+                IGNORED_UPLOAD_FILES.includes(file.name) ||
+                file.name === '.env' ||
+                file.name.startsWith('.env.') ||
+                file.name.endsWith('.log')
+            ) {
                 continue;
             }
 

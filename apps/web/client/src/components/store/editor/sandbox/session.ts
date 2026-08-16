@@ -1,5 +1,54 @@
 import { api } from '@/trpc/client';
-import { CodeProvider, createCodeProviderClient, type Provider } from '@onlook/code-provider';
+import {
+    CodeProvider,
+    Provider,
+    ProviderBackgroundCommand,
+    ProviderFileWatcher,
+    ProviderTask,
+    ProviderTerminal,
+    createCodeProviderClient,
+    type CopyFileOutput,
+    type CopyFilesInput,
+    type CreateDirectoryInput,
+    type CreateDirectoryOutput,
+    type CreateSessionInput,
+    type CreateSessionOutput,
+    type CreateTerminalInput,
+    type CreateTerminalOutput,
+    type DeleteFilesInput,
+    type DeleteFilesOutput,
+    type DownloadFilesInput,
+    type DownloadFilesOutput,
+    type GetTaskInput,
+    type GetTaskOutput,
+    type GitStatusInput,
+    type GitStatusOutput,
+    type InitializeInput,
+    type InitializeOutput,
+    type ListFilesInput,
+    type ListFilesOutput,
+    type PauseProjectInput,
+    type PauseProjectOutput,
+    type ReadFileInput,
+    type ReadFileOutput,
+    type RenameFileInput,
+    type RenameFileOutput,
+    type SetupInput,
+    type SetupOutput,
+    type StatFileInput,
+    type StatFileOutput,
+    type StopProjectInput,
+    type StopProjectOutput,
+    type TerminalBackgroundCommandInput,
+    type TerminalBackgroundCommandOutput,
+    type TerminalCommandInput,
+    type TerminalCommandOutput,
+    type WatchEvent,
+    type WatchFilesInput,
+    type WatchFilesOutput,
+    type WriteFileInput,
+    type WriteFileOutput,
+} from '@onlook/code-provider';
 import type { Branch } from '@onlook/models';
 import { makeAutoObservable } from 'mobx';
 import type { ErrorManager } from '../error';
@@ -29,6 +78,14 @@ export class SessionManager {
         this.isConnecting = true;
 
         const attemptConnection = async () => {
+            if (sandboxId.startsWith('local:')) {
+                const provider = new LocalTRPCProvider(sandboxId);
+                await provider.initialize({});
+                this.provider = provider;
+                await this.createTerminalSessions(provider);
+                return;
+            }
+
             const provider = await createCodeProviderClient(CodeProvider.CodeSandbox, {
                 providerOptions: {
                     codesandbox: {
@@ -243,5 +300,259 @@ export class SessionManager {
         this.provider = null;
         this.isConnecting = false;
         this.terminalSessions.clear();
+    }
+}
+
+class LocalTRPCProvider extends Provider {
+    constructor(private readonly sandboxId: string) {
+        super();
+    }
+
+    async initialize(_input: InitializeInput): Promise<InitializeOutput> {
+        return {};
+    }
+
+    async setup(_input: SetupInput): Promise<SetupOutput> {
+        return {};
+    }
+
+    async createSession(_input: CreateSessionInput): Promise<CreateSessionOutput> {
+        return {};
+    }
+
+    async writeFile(input: WriteFileInput): Promise<WriteFileOutput> {
+        return api.sandbox.localWriteFile.mutate({
+            sandboxId: this.sandboxId,
+            path: input.args.path,
+            content: input.args.content,
+            overwrite: input.args.overwrite,
+        });
+    }
+
+    async renameFile(input: RenameFileInput): Promise<RenameFileOutput> {
+        return api.sandbox.localRenameFile.mutate({
+            sandboxId: this.sandboxId,
+            oldPath: input.args.oldPath,
+            newPath: input.args.newPath,
+        });
+    }
+
+    async statFile(input: StatFileInput): Promise<StatFileOutput> {
+        return api.sandbox.localStatFile.query({
+            sandboxId: this.sandboxId,
+            path: input.args.path,
+        });
+    }
+
+    async deleteFiles(input: DeleteFilesInput): Promise<DeleteFilesOutput> {
+        return api.sandbox.localDeleteFiles.mutate({
+            sandboxId: this.sandboxId,
+            path: input.args.path,
+            recursive: input.args.recursive,
+        });
+    }
+
+    async listFiles(input: ListFilesInput): Promise<ListFilesOutput> {
+        return api.sandbox.localListFiles.query({
+            sandboxId: this.sandboxId,
+            path: input.args.path,
+        });
+    }
+
+    async readFile(input: ReadFileInput): Promise<ReadFileOutput> {
+        const result = await api.sandbox.localReadFile.query({
+            sandboxId: this.sandboxId,
+            path: input.args.path,
+        });
+        return {
+            file: {
+                ...result.file,
+                toString: () => String(result.file.content),
+            },
+        };
+    }
+
+    async downloadFiles(_input: DownloadFilesInput): Promise<DownloadFilesOutput> {
+        return {};
+    }
+
+    async copyFiles(_input: CopyFilesInput): Promise<CopyFileOutput> {
+        throw new Error('Copying files is not implemented for local web mode yet');
+    }
+
+    async createDirectory(input: CreateDirectoryInput): Promise<CreateDirectoryOutput> {
+        return api.sandbox.localCreateDirectory.mutate({
+            sandboxId: this.sandboxId,
+            path: input.args.path,
+        });
+    }
+
+    async watchFiles(input: WatchFilesInput): Promise<WatchFilesOutput> {
+        return { watcher: new LocalNoopWatcher(input.onFileChange) };
+    }
+
+    async createTerminal(_input: CreateTerminalInput): Promise<CreateTerminalOutput> {
+        return { terminal: new LocalNoopTerminal() };
+    }
+
+    async getTask(input: GetTaskInput): Promise<GetTaskOutput> {
+        return { task: new LocalTask(this.sandboxId, input.args.id) };
+    }
+
+    async runCommand(input: TerminalCommandInput): Promise<TerminalCommandOutput> {
+        return api.sandbox.localRunCommand.mutate({
+            sandboxId: this.sandboxId,
+            command: input.args.command,
+        });
+    }
+
+    async runBackgroundCommand(
+        input: TerminalBackgroundCommandInput,
+    ): Promise<TerminalBackgroundCommandOutput> {
+        return { command: new LocalBackgroundCommand(this.sandboxId, input.args.command) };
+    }
+
+    async gitStatus(_input: GitStatusInput): Promise<GitStatusOutput> {
+        return api.sandbox.localGitStatus.query({ sandboxId: this.sandboxId });
+    }
+
+    async reload(): Promise<boolean> {
+        return true;
+    }
+
+    async reconnect(): Promise<void> {}
+
+    async ping(): Promise<boolean> {
+        return true;
+    }
+
+    async pauseProject(_input: PauseProjectInput): Promise<PauseProjectOutput> {
+        return {};
+    }
+
+    async stopProject(_input: StopProjectInput): Promise<StopProjectOutput> {
+        return {};
+    }
+
+    async listProjects(): Promise<Record<string, never>> {
+        return {};
+    }
+
+    async destroy(): Promise<void> {}
+}
+
+class LocalNoopWatcher extends ProviderFileWatcher {
+    constructor(private readonly callback?: (event: WatchEvent) => Promise<void>) {
+        super();
+    }
+
+    async start(_input: WatchFilesInput): Promise<void> {}
+
+    async stop(): Promise<void> {}
+
+    registerEventCallback(callback: (event: WatchEvent) => Promise<void>): void {
+        void this.callback;
+        void callback;
+    }
+}
+
+class LocalNoopTerminal extends ProviderTerminal {
+    get id(): string {
+        return 'local-terminal';
+    }
+
+    get name(): string {
+        return 'Local terminal';
+    }
+
+    async open(): Promise<string> {
+        return '';
+    }
+
+    async write(_input: string): Promise<void> {}
+
+    async run(_input: string): Promise<void> {}
+
+    async kill(): Promise<void> {}
+
+    onOutput(_callback: (data: string) => void): () => void {
+        return () => {};
+    }
+}
+
+class LocalTask extends ProviderTask {
+    constructor(
+        private readonly sandboxId: string,
+        private readonly taskId: string,
+    ) {
+        super();
+    }
+
+    get id(): string {
+        return this.taskId;
+    }
+
+    get name(): string {
+        return this.taskId;
+    }
+
+    get command(): string {
+        return this.taskId === 'dev' ? 'npm run dev -- -p 3001' : this.taskId;
+    }
+
+    async open(): Promise<string> {
+        return '';
+    }
+
+    async run(): Promise<void> {
+        await api.sandbox.localRunCommand.mutate({
+            sandboxId: this.sandboxId,
+            command: this.command,
+        });
+    }
+
+    async restart(): Promise<void> {
+        await this.run();
+    }
+
+    async stop(): Promise<void> {}
+
+    onOutput(_callback: (data: string) => void): () => void {
+        return () => {};
+    }
+}
+
+class LocalBackgroundCommand extends ProviderBackgroundCommand {
+    constructor(
+        private readonly sandboxId: string,
+        private readonly commandValue: string,
+    ) {
+        super();
+    }
+
+    get name(): string | undefined {
+        return this.commandValue.split(/\s+/)[0];
+    }
+
+    get command(): string {
+        return this.commandValue;
+    }
+
+    async open(): Promise<string> {
+        const result = await api.sandbox.localRunCommand.mutate({
+            sandboxId: this.sandboxId,
+            command: this.commandValue,
+        });
+        return result.output;
+    }
+
+    async restart(): Promise<void> {
+        await this.open();
+    }
+
+    async kill(): Promise<void> {}
+
+    onOutput(_callback: (data: string) => void): () => void {
+        return () => {};
     }
 }

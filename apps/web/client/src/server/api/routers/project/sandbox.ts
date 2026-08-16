@@ -6,9 +6,11 @@ import {
     createCodeProviderClient,
     getStaticCodeProvider,
 } from '@onlook/code-provider';
+import { NodeFsProvider } from '@onlook/code-provider/providers/nodefs';
 import { getSandboxPreviewUrl, SandboxTemplates, Templates } from '@onlook/constants';
 import { shortenUuid } from '@onlook/utility/src/id';
 
+import { env } from '@/env';
 import { createTRPCRouter, protectedProcedure } from '../../trpc';
 import { listAccessibleSandboxIds, verifySandboxAccess } from './helper';
 
@@ -16,10 +18,12 @@ function getProvider({
     sandboxId,
     userId,
     provider = CodeProvider.CodeSandbox,
+    initClient = false,
 }: {
     sandboxId: string;
     provider?: CodeProvider;
     userId?: undefined | string;
+    initClient?: boolean;
 }) {
     if (provider === CodeProvider.CodeSandbox) {
         return createCodeProviderClient(CodeProvider.CodeSandbox, {
@@ -27,16 +31,30 @@ function getProvider({
                 codesandbox: {
                     sandboxId,
                     userId,
+                    initClient,
                 },
             },
         });
     } else {
-        return createCodeProviderClient(CodeProvider.NodeFs, {
-            providerOptions: {
-                nodefs: {},
+        const provider = new NodeFsProvider({
+            rootDir: env.ONLOOK_LOCAL_PROJECT_ROOT,
+            tasks: {
+                dev: { name: 'dev', command: 'npm run dev -- -p 3001' },
             },
         });
+        return provider.initialize({}).then(() => provider);
     }
+}
+
+async function getLocalProvider() {
+    const provider = new NodeFsProvider({
+        rootDir: env.ONLOOK_LOCAL_PROJECT_ROOT,
+        tasks: {
+            dev: { name: 'dev', command: 'npm run dev -- -p 3001' },
+        },
+    });
+    await provider.initialize({});
+    return provider;
 }
 
 export const sandboxRouter = createTRPCRouter({
@@ -74,6 +92,19 @@ export const sandboxRouter = createTRPCRouter({
             }),
         )
         .mutation(async ({ input, ctx }) => {
+            if (input.sandboxId.startsWith('local:')) {
+                const provider = await getLocalProvider();
+                try {
+                    return await provider.createSession({
+                        args: {
+                            id: shortenUuid(ctx.user.id, 20),
+                        },
+                    });
+                } finally {
+                    await provider.destroy().catch(() => {});
+                }
+            }
+
             const userId = ctx.user.id;
             await verifySandboxAccess(ctx.db, userId, input.sandboxId);
             const provider = await getProvider({
@@ -87,6 +118,136 @@ export const sandboxRouter = createTRPCRouter({
             });
             await provider.destroy();
             return session;
+        }),
+    localListFiles: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), path: z.string() }))
+        .query(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.listFiles({ args: { path: input.path } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localReadFile: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), path: z.string() }))
+        .query(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.readFile({ args: { path: input.path } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localStatFile: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), path: z.string() }))
+        .query(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.statFile({ args: { path: input.path } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localWriteFile: protectedProcedure
+        .input(
+            z.object({
+                sandboxId: z.string(),
+                path: z.string(),
+                content: z.any(),
+                overwrite: z.boolean().optional(),
+            }),
+        )
+        .mutation(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.writeFile({
+                    args: {
+                        path: input.path,
+                        content: input.content,
+                        overwrite: input.overwrite,
+                    },
+                });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localDeleteFiles: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), path: z.string(), recursive: z.boolean().optional() }))
+        .mutation(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.deleteFiles({ args: { path: input.path, recursive: input.recursive } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localRenameFile: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), oldPath: z.string(), newPath: z.string() }))
+        .mutation(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.renameFile({ args: { oldPath: input.oldPath, newPath: input.newPath } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localCreateDirectory: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), path: z.string() }))
+        .mutation(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.createDirectory({ args: { path: input.path } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localRunCommand: protectedProcedure
+        .input(z.object({ sandboxId: z.string(), command: z.string() }))
+        .mutation(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.runCommand({ args: { command: input.command } });
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
+        }),
+    localGitStatus: protectedProcedure
+        .input(z.object({ sandboxId: z.string() }))
+        .query(async ({ input }) => {
+            if (!input.sandboxId.startsWith('local:')) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expected a local sandbox id' });
+            }
+            const provider = await getLocalProvider();
+            try {
+                return await provider.gitStatus({});
+            } finally {
+                await provider.destroy().catch(() => {});
+            }
         }),
     hibernate: protectedProcedure
         .input(
@@ -177,6 +338,50 @@ export const sandboxRouter = createTRPCRouter({
                 message: `Failed to create sandbox after ${MAX_RETRY_ATTEMPTS} attempts: ${lastError?.message}`,
                 cause: lastError,
             });
+        }),
+    uploadFilesAndSetup: protectedProcedure
+        .input(
+            z.object({
+                sandboxId: z.string(),
+                files: z.array(
+                    z.object({
+                        path: z.string(),
+                        content: z.string(),
+                        type: z.enum(['text', 'binary']),
+                    }),
+                ),
+            }),
+        )
+        .mutation(async ({ input, ctx }) => {
+            await verifySandboxAccess(ctx.db, ctx.user.id, input.sandboxId);
+            const provider = await getProvider({
+                sandboxId: input.sandboxId,
+                userId: ctx.user.id,
+                initClient: true,
+            });
+
+            try {
+                for (const file of input.files) {
+                    const result = await provider.writeFile({
+                        args: {
+                            path: file.path,
+                            content:
+                                file.type === 'binary'
+                                    ? Uint8Array.from(Buffer.from(file.content, 'base64'))
+                                    : file.content,
+                            overwrite: true,
+                        },
+                    });
+
+                    if (!result.success) {
+                        throw new Error(`Remote write failed for ${file.path}`);
+                    }
+                }
+
+                await provider.setup({});
+            } finally {
+                await provider.destroy();
+            }
         }),
     delete: protectedProcedure
         .input(

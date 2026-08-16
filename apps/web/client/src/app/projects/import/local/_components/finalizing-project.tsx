@@ -8,13 +8,13 @@ import { StepContent, StepFooter, StepHeader } from '../../steps';
 import { useProjectCreation } from '../_context';
 
 export const FinalizingProject = () => {
-    const { isFinalizing, error, retry, cancel } = useProjectCreation();
+    const { isFinalizing, finalizingStatus, error, retry, cancel } = useProjectCreation();
 
     return (
         <>
             <StepHeader>
                 <CardTitle>{'Setting up project...'}</CardTitle>
-                <CardDescription>{"We're setting up your project"}</CardDescription>
+                <CardDescription>{error ? 'Project setup failed' : finalizingStatus}</CardDescription>
             </StepHeader>
             <StepContent>
                 <motion.div

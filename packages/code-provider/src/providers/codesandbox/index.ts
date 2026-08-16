@@ -412,6 +412,7 @@ export class CodesandboxProvider extends Provider {
         }
         return this.sandbox.createBrowserSession({
             id: input.args.id,
+            permission: 'write',
         });
     }
 }

@@ -11,11 +11,12 @@ export default function AuthRedirect() {
     const router = useRouter();
     const { data: subscription, isLoading: subscriptionLoading } = api.subscription.get.useQuery();
     const { data: legacySubscription, isLoading: legacyLoading } = api.subscription.getLegacySubscriptions.useQuery();
+    const isDevLoginEnabled = process.env.NEXT_PUBLIC_DEV_LOGIN_ENABLED === 'true';
 
     useEffect(() => {
         const handleRedirect = async () => {
             // Wait for both subscription queries to complete
-            if (subscriptionLoading || legacyLoading) {
+            if (!isDevLoginEnabled && (subscriptionLoading || legacyLoading)) {
                 return;
             }
 
@@ -23,17 +24,21 @@ export default function AuthRedirect() {
             await localforage.removeItem(LocalForageKeys.RETURN_URL);
 
             // If user has no active subscription or legacy subscription, redirect to demo-only page
-            if (!subscription && !legacySubscription) {
+            if (!isDevLoginEnabled && !subscription && !legacySubscription) {
                 router.replace(Routes.DEMO_ONLY);
                 return;
             }
 
             // Otherwise, redirect to their intended destination
             const sanitizedUrl = sanitizeReturnUrl(returnUrl);
+            if (isDevLoginEnabled && sanitizedUrl === Routes.HOME) {
+                router.replace(Routes.PROJECTS);
+                return;
+            }
             router.replace(sanitizedUrl);
         };
         handleRedirect();
-    }, [router, subscription, legacySubscription, subscriptionLoading, legacyLoading]);
+    }, [router, subscription, legacySubscription, subscriptionLoading, legacyLoading, isDevLoginEnabled]);
 
     return (
         <div className="flex h-screen w-screen items-center justify-center">

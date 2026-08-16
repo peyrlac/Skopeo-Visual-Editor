@@ -4,9 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useState } from 'react';
 
-import type { Provider } from '@onlook/code-provider';
-import { CodeProvider, createCodeProviderClient } from '@onlook/code-provider';
-import { NEXT_JS_FILE_EXTENSIONS, SandboxTemplates, Templates } from '@onlook/constants';
+import { NEXT_JS_FILE_EXTENSIONS } from '@onlook/constants';
 import { RouterType } from '@onlook/models';
 import { isTargetFile } from '@onlook/utility';
 
@@ -27,6 +25,7 @@ interface ProjectCreationContextValue {
     projectData: Partial<Project>;
     direction: number;
     isFinalizing: boolean;
+    finalizingStatus: string;
     totalSteps: number;
 
     // Actions
@@ -98,10 +97,9 @@ export const ProjectCreationProvider = ({ children, totalSteps }: ProjectCreatio
     const [error, setError] = useState<string | null>(null);
     const [direction, setDirection] = useState(0);
     const [isFinalizing, setIsFinalizing] = useState(false);
-    const { data: user } = api.user.get.useQuery();
+    const [finalizingStatus, setFinalizingStatus] = useState("Preparing project...");
+    const { data: user, refetch: refetchUser } = api.user.get.useQuery();
     const { mutateAsync: createProject } = api.project.create.useMutation();
-    const { mutateAsync: forkSandbox } = api.sandbox.fork.useMutation();
-    const { mutateAsync: startSandbox } = api.sandbox.start.useMutation();
 
     const setProjectData = (newData: Partial<Project>) => {
         setProjectDataState((prevData) => ({ ...prevData, ...newData }));
@@ -110,67 +108,44 @@ export const ProjectCreationProvider = ({ children, totalSteps }: ProjectCreatio
     const finalizeProject = async () => {
         try {
             setIsFinalizing(true);
+            setError(null);
+            setFinalizingStatus("Checking sign-in session...");
 
-            if (!user?.id) {
-                console.error('No user found');
-                return;
+            const currentUser = user ?? (await refetchUser()).data;
+            if (!currentUser?.id) {
+                throw new Error('Could not load your Onlook user profile. Go back to /login and use the dev login button again.');
             }
+            setFinalizingStatus("Checking project files...");
             if (!projectData.files) {
-                return;
+                throw new Error('No project files found');
             }
 
-            const packageJsonFile = projectData.files.find(
-                (f) => f.path.endsWith('package.json') && f.type === ProcessedFileType.TEXT,
-            );
-
-            const template = SandboxTemplates[Templates.BLANK];
-            const forkedSandbox = await forkSandbox({
-                sandbox: {
-                    id: template.id,
-                    port: detectPortFromPackageJson(packageJsonFile),
-                },
-                config: {
-                    title: `Imported project - ${user.id}`,
-                    tags: ['imported', 'local', user.id],
-                },
-            });
-
-            const provider = await createCodeProviderClient(CodeProvider.CodeSandbox, {
-                providerOptions: {
-                    codesandbox: {
-                        sandboxId: forkedSandbox.sandboxId,
-                        userId: user.id,
-                        initClient: true,
-                        keepActiveWhileConnected: false,
-                        getSession: async (sandboxId) => {
-                            return startSandbox({ sandboxId });
-                        },
+            setFinalizingStatus("Saving local project...");
+            const localProjectName = projectData.folderPath ?? projectData.name ?? 'local-project';
+            const localSandboxId = `local:${localProjectName}`;
+            const localPreviewUrl =
+                process.env.NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL ?? 'http://localhost:3001';
+            const project = await withTimeout(
+                createProject({
+                    project: {
+                        name: projectData.name ?? 'New project',
+                        description: 'Local project',
                     },
-                },
-            });
-
-            await uploadToSandbox(projectData.files, provider);
-            await provider.setup({});
-            await provider.destroy();
-
-            const project = await createProject({
-                project: {
-                    name: projectData.name ?? 'New project',
-                    description: 'Your new project',
-                },
-                sandboxId: forkedSandbox.sandboxId,
-                sandboxUrl: forkedSandbox.previewUrl,
-                userId: user.id,
-            });
+                    sandboxId: localSandboxId,
+                    sandboxUrl: localPreviewUrl,
+                    userId: currentUser.id,
+                }),
+                30_000,
+                'Timed out while saving the project',
+            );
             if (!project) {
-                console.error('Failed to create project');
-                return;
+                throw new Error('Failed to create project');
             }
             // Open the project
             router.push(`${Routes.PROJECT}/${project.id}`);
         } catch (error) {
             console.error('Error creating project:', error);
-            setError('Failed to create project');
+            setError(error instanceof Error ? error.message : 'Failed to create project');
             return;
         } finally {
             setIsFinalizing(false);
@@ -281,6 +256,7 @@ export const ProjectCreationProvider = ({ children, totalSteps }: ProjectCreatio
         projectData,
         direction,
         isFinalizing,
+        finalizingStatus,
         totalSteps,
         error,
         setProjectData,
@@ -307,32 +283,17 @@ export const useProjectCreation = (): ProjectCreationContextValue => {
     return context;
 };
 
-export const uploadToSandbox = async (files: ProcessedFile[], provider: Provider) => {
-    for (const file of files) {
-        try {
-            if (file.type === ProcessedFileType.BINARY) {
-                const uint8Array = new Uint8Array(file.content);
-                await provider.writeFile({
-                    args: {
-                        path: file.path,
-                        content: uint8Array,
-                        overwrite: true,
-                    },
-                });
-            } else {
-                await provider.writeFile({
-                    args: {
-                        path: file.path,
-                        content: file.content,
-                        overwrite: true,
-                    },
-                });
-            }
-        } catch (fileError) {
-            console.error(`Error uploading file ${file.path}:`, fileError);
-            throw new Error(
-                `Failed to upload file: ${file.path} - ${fileError instanceof Error ? fileError.message : 'Unknown error'}`,
-            );
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    try {
+        return await Promise.race([promise, timeout]);
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
         }
     }
 };

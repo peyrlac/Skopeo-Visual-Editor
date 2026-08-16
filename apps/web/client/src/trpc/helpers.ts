@@ -16,9 +16,19 @@ export const links = [
     httpBatchStreamLink({
         transformer: SuperJSON,
         url: getBaseUrl() + '/api/trpc',
-        headers: () => {
+        headers: async () => {
             const headers = new Headers();
             headers.set('x-trpc-source', 'vanilla-client');
+            if (typeof window !== 'undefined') {
+                const { createClient } = await import('@/utils/supabase/client');
+                const supabase = createClient();
+                const {
+                    data: { session },
+                } = await supabase.auth.getSession();
+                if (session?.access_token) {
+                    headers.set('authorization', `Bearer ${session.access_token}`);
+                }
+            }
             return headers;
         },
     }),

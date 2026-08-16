@@ -1,4 +1,5 @@
-const isDev = process.env.NODE_ENV === 'development';
+const isLocalPreview = !!process.env.NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL;
+const isDev = process.env.NODE_ENV === 'development' || isLocalPreview;
 const BASE_EXCLUDED_DIRECTORIES = ['node_modules', 'dist', 'build', '.git', '.next'] as const;
 
 export const CUSTOM_OUTPUT_DIR = '.next-prod';

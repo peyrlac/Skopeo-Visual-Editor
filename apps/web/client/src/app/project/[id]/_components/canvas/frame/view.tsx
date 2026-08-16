@@ -267,9 +267,6 @@ export const FrameComponent = observer(
                     return safeFallback;
                 }
 
-                // Register the iframe with the editor engine
-                editorEngine.frames.registerView(frame, iframe as IFrameView);
-
                 const syncMethods = {
                     supportsOpenDevTools: () =>
                         !!iframe.contentWindow && 'openDevTools' in iframe.contentWindow,
@@ -286,13 +283,17 @@ export const FrameComponent = observer(
                     console.warn(
                         `${PENPAL_PARENT_CHANNEL} (${frame.id}) - Failed to setup penpal connection: iframeRemote is null`,
                     );
-                    return Object.assign(iframe, syncMethods, remoteMethods) as IFrameView;
+                    const view = Object.assign(iframe, syncMethods, remoteMethods) as IFrameView;
+                    editorEngine.frames.registerView(frame, view);
+                    return view;
                 }
 
-                return Object.assign(iframe, {
+                const view = Object.assign(iframe, {
                     ...syncMethods,
                     ...remoteMethods,
-                });
+                }) as IFrameView;
+                editorEngine.frames.registerView(frame, view);
+                return view;
             }, [penpalChild, frame, iframeRef]);
 
             useEffect(() => {

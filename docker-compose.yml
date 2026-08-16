@@ -2,15 +2,26 @@ name: onlook
 
 services:
   web-client:
+    container_name: onlook-web-client-dev
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - apps/web/client/.env
+    environment:
+      NEXT_PUBLIC_DEV_LOGIN_ENABLED: "true"
+      NEXT_PUBLIC_SUPABASE_URL: "http://host.docker.internal:54321"
+      SUPABASE_DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:54322/postgres"
+      ONLOOK_LOCAL_PROJECT_ROOT: "/workspace/skopeo-next"
+      NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL: "http://localhost:3001"
+    command: ["bun", "apps/web/client/.next/standalone/apps/web/client/server.js"]
     ports:
       - "3000:3000"
+    volumes:
+      - D:/Development/Skopeo/SkopeoAPP/Next:/workspace/skopeo-next
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - supabase_network_onlook-web
 
 networks:
   supabase_network_onlook-web:

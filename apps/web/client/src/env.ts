@@ -13,6 +13,7 @@ export const env = createEnv({
         SUPABASE_SERVICE_ROLE_KEY: z.string(),
         RESEND_API_KEY: z.string().optional(),
         FREESTYLE_API_KEY: z.string().optional(),
+        ONLOOK_LOCAL_PROJECT_ROOT: z.string().default('/workspace/skopeo-next'),
 
         // Stripe
         STRIPE_WEBHOOK_SECRET: z.string().optional(),
@@ -74,6 +75,8 @@ export const env = createEnv({
         NEXT_PUBLIC_POSTHOG_HOST: z.string().optional(),
         NEXT_PUBLIC_GLEAP_API_KEY: z.string().optional(),
         NEXT_PUBLIC_FEATURE_COLLABORATION: z.coerce.boolean().default(false),
+        NEXT_PUBLIC_DEV_LOGIN_ENABLED: z.coerce.boolean().default(false),
+        NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL: z.string().default('http://localhost:3001'),
         NEXT_PUBLIC_HOSTING_DOMAIN: z.string().optional(),
         NEXT_PUBLIC_RB2B_ID: z.string().optional(),
     },
@@ -87,6 +90,9 @@ export const env = createEnv({
         CSB_API_KEY: process.env.CSB_API_KEY,
         RESEND_API_KEY: process.env.RESEND_API_KEY,
         NEXT_PUBLIC_FEATURE_COLLABORATION: process.env.NEXT_PUBLIC_FEATURE_COLLABORATION,
+        NEXT_PUBLIC_DEV_LOGIN_ENABLED: process.env.NEXT_PUBLIC_DEV_LOGIN_ENABLED,
+        ONLOOK_LOCAL_PROJECT_ROOT: process.env.ONLOOK_LOCAL_PROJECT_ROOT,
+        NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL: process.env.NEXT_PUBLIC_LOCAL_PROJECT_PREVIEW_URL,
 
         // Supabase
         SUPABASE_DATABASE_URL: process.env.SUPABASE_DATABASE_URL,

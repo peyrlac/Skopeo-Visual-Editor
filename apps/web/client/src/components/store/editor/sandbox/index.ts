@@ -62,6 +62,10 @@ export class SandboxManager {
         );
     }
 
+    get isLocal() {
+        return this.branch.sandbox.id.startsWith('local:');
+    }
+
     async getRouterConfig(): Promise<RouterConfig | null> {
         if (!!this.routerConfig) {
             return this.routerConfig;
@@ -83,8 +87,8 @@ export class SandboxManager {
             exclude: EXCLUDED_SYNC_PATHS,
         });
 
-        await this.sync.start();
         await this.ensurePreloadScriptExists();
+        await this.sync.start();
         await this.fs.rebuildIndex();
     }
 
