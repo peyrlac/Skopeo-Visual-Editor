@@ -2,6 +2,7 @@ import { env } from '@/env';
 import { NodeFsProvider } from '@onlook/code-provider/providers/nodefs';
 import { previewClassNamePatchInFile, resolveElementSourceFromFiles } from '@onlook/parser';
 import { TRPCError } from '@trpc/server';
+import path from 'node:path';
 import { z } from 'zod';
 
 import { createTRPCRouter, protectedProcedure } from '../../trpc';
@@ -29,17 +30,18 @@ export const studioRouter = createTRPCRouter({
         )
         .mutation(async ({ input }) => {
             ensureLocalSandbox(input.sandboxId);
+            const filePath = ensurePatchableSourcePath(input.filePath);
             const provider = await getLocalProvider();
             try {
-                const { file } = await provider.readFile({ args: { path: input.filePath } });
+                const { file } = await provider.readFile({ args: { path: filePath } });
                 if (typeof file.content !== 'string') {
                     throw new TRPCError({
                         code: 'BAD_REQUEST',
-                        message: `${input.filePath} is not a text file`,
+                        message: `${filePath} is not a text file`,
                     });
                 }
                 return previewClassNamePatchInFile({
-                    filePath: input.filePath,
+                    filePath,
                     content: file.content,
                     oid: input.oid,
                     nextClassName: input.nextClassName,
@@ -60,23 +62,24 @@ export const studioRouter = createTRPCRouter({
         )
         .mutation(async ({ input }) => {
             ensureLocalSandbox(input.sandboxId);
+            const filePath = ensurePatchableSourcePath(input.filePath);
             const provider = await getLocalProvider();
             try {
-                const { file } = await provider.readFile({ args: { path: input.filePath } });
+                const { file } = await provider.readFile({ args: { path: filePath } });
                 if (typeof file.content !== 'string') {
                     throw new TRPCError({
                         code: 'BAD_REQUEST',
-                        message: `${input.filePath} is not a text file`,
+                        message: `${filePath} is not a text file`,
                     });
                 }
                 const patch = previewClassNamePatchInFile({
-                    filePath: input.filePath,
+                    filePath,
                     content: file.content,
                     oid: input.oid,
                     nextClassName: input.nextClassName,
                 });
                 await provider.writeFile({
-                    args: { path: input.filePath, content: patch.after, overwrite: true },
+                    args: { path: filePath, content: patch.after, overwrite: true },
                 });
                 return { ...patch, status: 'applied' as const };
             } finally {
@@ -92,6 +95,29 @@ function ensureLocalSandbox(sandboxId: string) {
             message: 'Skopeo Studio V1 only supports local projects',
         });
     }
+}
+
+function ensurePatchableSourcePath(filePath: string) {
+    const normalized = filePath.replace(/\\/g, '/');
+    const cleanPath = path.posix.normalize(normalized);
+    const isUnsafePath =
+        !normalized ||
+        normalized.includes('\0') ||
+        normalized.startsWith('/') ||
+        /^[A-Za-z]:/.test(normalized) ||
+        cleanPath.startsWith('../') ||
+        cleanPath === '..';
+    const isAllowedRoot = SEARCH_DIRS.some((dir) => cleanPath.startsWith(`${dir}/`));
+    const isAllowedExtension = TEXT_EXTENSIONS.test(cleanPath);
+
+    if (isUnsafePath || !isAllowedRoot || !isAllowedExtension) {
+        throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Skopeo Studio V1 only patches source files under src/components, src/views, or src/app',
+        });
+    }
+
+    return cleanPath;
 }
 
 async function getLocalProvider() {

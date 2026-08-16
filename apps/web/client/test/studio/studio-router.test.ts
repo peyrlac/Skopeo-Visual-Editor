@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { previewClassNamePatchInFile, resolveElementSourceFromFiles } from '@onlook/parser';
+
+process.env.SKIP_ENV_VALIDATION = 'true';
 
 const root = path.join(import.meta.dir, 'tmp-skopeo-mini');
 const filePath = 'src/components/Card.tsx';
 const absoluteFile = path.join(root, filePath);
+const packageFile = path.join(root, 'package.json');
 
 const fixture = `export function Card() {
     return (
@@ -13,41 +15,107 @@ const fixture = `export function Card() {
             <h2 data-oid="title-1" className="text-lg font-semibold">
                 Dune
             </h2>
+            <p data-oid="body-1" className={true ? 'text-sm' : 'text-xs'}>
+                A desert planet.
+            </p>
         </article>
     );
 }
 `;
 
-describe('studio local transforms', () => {
+describe('studio router', () => {
     beforeEach(async () => {
+        process.env.ONLOOK_LOCAL_PROJECT_ROOT = root;
         await mkdir(path.dirname(absoluteFile), { recursive: true });
         await writeFile(absoluteFile, fixture, 'utf8');
+        await writeFile(packageFile, '{"name":"skopeo-mini"}\n', 'utf8');
     });
 
     afterEach(async () => {
         await rm(root, { recursive: true, force: true });
     });
 
-    test('resolves an oid from local files', async () => {
-        const content = await readFile(absoluteFile, 'utf8');
-        const source = resolveElementSourceFromFiles([{ path: filePath, content }], 'title-1');
+    test('resolves an oid from local files through tRPC', async () => {
+        const caller = await createStudioCaller();
+
+        const source = await caller.studio.resolveElementSource({
+            sandboxId: 'local:test',
+            oid: 'title-1',
+        });
+
         expect(source?.filePath).toBe(filePath);
         expect(source?.className).toEqual({ kind: 'static', value: 'text-lg font-semibold' });
-    });
+    }, 15000);
 
-    test('previews and writes class patch output', async () => {
-        const content = await readFile(absoluteFile, 'utf8');
-        const patch = previewClassNamePatchInFile({
+    test('previews a class patch through tRPC', async () => {
+        const caller = await createStudioCaller();
+
+        const patch = await caller.studio.previewClassPatch({
+            sandboxId: 'local:test',
             filePath,
-            content,
             oid: 'title-1',
             nextClassName: 'text-2xl font-bold text-primary',
         });
 
-        await writeFile(absoluteFile, patch.after, 'utf8');
-        const updated = await readFile(absoluteFile, 'utf8');
-
-        expect(updated).toContain('text-2xl font-bold text-primary');
+        expect(patch.after).toContain('text-2xl font-bold text-primary');
         expect(patch.diff).toContain('text-lg font-semibold');
+        expect(await readFile(absoluteFile, 'utf8')).toBe(fixture);
+    });
+
+    test('applies a class patch through tRPC', async () => {
+        const caller = await createStudioCaller();
+
+        const patch = await caller.studio.applyClassPatch({
+            sandboxId: 'local:test',
+            filePath,
+            oid: 'title-1',
+            nextClassName: 'text-2xl font-bold text-primary',
+        });
+
+        const updated = await readFile(absoluteFile, 'utf8');
+        expect(patch.status).toBe('applied');
+        expect(updated).toContain('text-2xl font-bold text-primary');
+        expect(updated).not.toContain('text-lg font-semibold');
+    });
+
+    test('rejects a non-local sandbox through tRPC', async () => {
+        const caller = await createStudioCaller();
+
+        await expect(
+            caller.studio.resolveElementSource({
+                sandboxId: 'remote:test',
+                oid: 'title-1',
+            }),
+        ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    test('rejects class patches outside the V1 source roots', async () => {
+        const caller = await createStudioCaller();
+
+        await expect(
+            caller.studio.previewClassPatch({
+                sandboxId: 'local:test',
+                filePath: 'package.json',
+                oid: 'title-1',
+                nextClassName: 'text-2xl',
+            }),
+        ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     });
 });
+
+async function createStudioCaller() {
+    const { appRouter } = await import('~/server/api/root');
+    return appRouter.createCaller({
+        db: {},
+        headers: new Headers(),
+        supabase: {},
+        user: {
+            id: 'user-1',
+            email: 'user@example.com',
+            app_metadata: {},
+            user_metadata: {},
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+        },
+    });
+}
